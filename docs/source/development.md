@@ -79,6 +79,49 @@ When adding, removing, or renaming firmware source or header files, update the `
 
 To decode a stack trace (printed via serial port) use the following tool: <https://esphome.github.io/esp-stacktrace-decoder/>
 
+## Simulating with Wokwi
+
+The repository contains a Wokwi simulation setup, so you can run the receiver in VS Code without hardware. It uses the files `wokwi.toml` (build outputs), `diagram.json` (the circuit) and `chips/` (a custom chip that emulates the SI4732, which has no built-in simulator part).
+
+### Requirements
+
+* [Wokwi Simulator extension](https://marketplace.visualstudio.com/items?itemName=wokwi.wokwi-vscode) for VS Code, signed in to your Wokwi account
+* [Arduino CLI](https://arduino.github.io/arduino-cli/1.2/installation/)
+* [Wokwi CLI](https://github.com/wokwi/wokwi-cli) (`wokwi-cli`), used to rebuild the custom chip
+
+### Build the firmware
+
+The simulation uses the LILYGO T-Embed variant, because the default parallel-bus display is not supported by the simulator:
+
+```shell
+arduino-cli compile --build-property "compiler.cpp.extra_flags=-DLILYGO_SI473X" --output-dir build --profile esp32s3-ospi ats-mini
+```
+
+The output goes to `build/`. Wokwi loads `build/ats-mini.ino.merged.bin` (a full flash image, including the custom partition table and the LittleFS filesystem) and `build/ats-mini.ino.elf` (for the debugger). Rebuild the firmware after every firmware change; the simulator picks up the new binary on the next start.
+
+### Start the simulation
+
+1. Open the repository folder in VS Code.
+2. Press <kbd>Ctrl+Shift+P</kbd> and run `Wokwi: Start Simulator`.
+3. When asked for the config file, keep the default `wokwi.toml`.
+
+`wokwi-cli lint diagram.json` validates the circuit and reports problems such as invalid pin connections.
+
+### Using the simulated receiver
+
+* **First boot:** the firmware shows the QR code screen (fresh preferences) and waits for a click of the encoder button. Click the knob once to continue.
+* **Rotary encoder:** rotate the knob to tune and navigate, press it to select.
+* **Display:** a `wokwi-ili9341` part stands in for the 170x320 ST7789 panel; the part is rotated and mirrored in `diagram.json` so the picture reads correctly. Adjust `rotate`/`flipHorizontal` on the `lcd` part if the orientation changes after a firmware update.
+* **Serial console:** the firmware sends no debug output over serial, so the console stays empty in normal operation.
+
+### Rebuilding the custom chip
+
+The SI4732 emulator (`chips/si4732.chip.c`) answers the I2C commands of the PU2CLR SI4735 library, so the firmware passes its radio self-test. It does not simulate RF reception: the reported signal strength is a fixed value, and audio, RDS and SSB patches are not available. Rebuild it after editing the source:
+
+```shell
+wokwi-cli chip compile chips/si4732.chip.c -o chips/si4732.chip.wasm
+```
+
 ## Enabling the pre-commit hooks
 
 1. Install `uv` <https://docs.astral.sh/uv/getting-started/installation/>

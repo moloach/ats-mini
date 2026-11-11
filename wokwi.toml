@@ -1,0 +1,8 @@
+[wokwi]
+version = 1
+firmware = "./build/ats-mini.ino.merged.bin"
+elf = "./build/ats-mini.ino.elf"
+
+[[chip]]
+name = 'si4732'
+binary = 'chips/si4732.chip.wasm'

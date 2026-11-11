@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "author": "ATS Mini Project",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {
+        "flashSize": "8",
+        "psramSize": "8",
+        "psramType": "octal"
+      }
+    },
+    {
+      "type": "wokwi-ili9341",
+      "id": "lcd",
+      "top": 60,
+      "left": 320,
+      "rotate": 90,
+      "attrs": {
+        "flipHorizontal": "1"
+      }
+    },
+    {
+      "type": "wokwi-ky-040",
+      "id": "encoder",
+      "top": 320,
+      "left": -100,
+      "attrs": {}
+    },
+    {
+      "type": "chip-si4732",
+      "id": "si4732",
+      "top": 20,
+      "left": 700,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    ["lcd:VCC", "esp:3V3.1", "red", []],
+    ["lcd:GND", "esp:GND.1", "black", []],
+    ["lcd:CS", "esp:10", "green", []],
+    ["lcd:D/C", "esp:13", "green", []],
+    ["lcd:RST", "esp:9", "green", []],
+    ["lcd:SCK", "esp:12", "green", []],
+    ["lcd:MOSI", "esp:11", "green", []],
+    ["lcd:LED", "esp:15", "green", []],
+
+    ["encoder:VCC", "esp:3V3.1", "red", []],
+    ["encoder:GND", "esp:GND.2", "black", []],
+    ["encoder:CLK", "esp:2", "green", []],
+    ["encoder:DT", "esp:1", "green", []],
+    ["encoder:SW", "esp:0", "green", []],
+
+    ["si4732:VCC", "esp:3V3.1", "red", []],
+    ["si4732:GND", "esp:GND.3", "black", []],
+    ["si4732:RST", "esp:16", "green", []],
+    ["si4732:SCL", "esp:8", "green", []],
+    ["si4732:SDA", "esp:18", "green", []]
+  ]
+}

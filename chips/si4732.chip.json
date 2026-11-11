@@ -1,0 +1,5 @@
+{
+  "name": "SI4732",
+  "author": "ats-mini",
+  "pins": ["VCC", "GND", "RST", "SCL", "SDA"]
+}
