@@ -5,19 +5,19 @@
 #include "Memories.h"
 #include "EIBI.h"
 
-// CB frequency range
-#define MIN_CB_FREQUENCY 26060
-#define MAX_CB_FREQUENCY 27995
+// CB frequency range in Hz
+#define MIN_CB_FREQUENCY 26060000
+#define MAX_CB_FREQUENCY 27995000
 
 //
-// Named frequencies, sorted by increasing frequency!
+// Named frequencies in Hz, sorted by increasing frequency!
 //
 static const NamedFreq namedFrequencies[] =
 {
-  {  1840, "FT8"  }, {  3573, "FT8"  }, {  5357, "FT8"  }, {  7074, "FT8" },
-  {  7165, "SSTV" }, {  7171, "SSTV" }, { 10136, "FT8"  }, { 14074, "FT8" },
-  { 14230, "SSTV" }, { 18100, "FT8"  }, { 21074, "FT8"  }, { 24915, "FT8" },
-  { 27700, "SSTV" }, { 28074, "FT8"  }, { 28680, "SSTV" },
+  {  1840000, "FT8"  }, {  3573000, "FT8"  }, {  5357000, "FT8"  }, {  7074000, "FT8" },
+  {  7165000, "SSTV" }, {  7171000, "SSTV" }, { 10136000, "FT8"  }, { 14074000, "FT8" },
+  { 14230000, "SSTV" }, { 18100000, "FT8"  }, { 21074000, "FT8"  }, { 24915000, "FT8" },
+  { 27700000, "SSTV" }, { 28074000, "FT8"  }, { 28680000, "SSTV" },
 };
 
 //
@@ -75,14 +75,12 @@ const char *getStationName()
   if(switchThemeEditor())
     return("*STATION*");
 
-  const char *station = getRDSMode() & RDS_PS? bufStationName : "";
+  const char *station = currentMode!=FM || (getRDSMode() & RDS_PS)? bufStationName : "";
   // Live FM identification takes precedence over a saved name.
   if(currentMode==FM && station[strspn(station, " ")]) return(station);
 
   static char memoryName[10];
-  uint32_t freq = freqToHz(currentFrequency, currentMode);
-  if(isSSB()) freq += currentBFO;
-  if(findMemoryName(freq, currentMode, bandIdx, memoryIdx, memoryName))
+  if(findMemoryName(currentFrequency, currentMode, bandIdx, memoryIdx, memoryName))
     return(memoryName);
 
   return(station);
@@ -134,7 +132,7 @@ static bool showStationName(const char *stationName, bool isLong = false)
 static bool showRadioText(const char *radioText, uint8_t width = 32)
 {
   bool changed = false;
-  int i, j;
+  int i, j, out = 0;
   char c;
 
   // Must have text
@@ -157,19 +155,19 @@ static bool showRadioText(const char *radioText, uint8_t width = 32)
       j++;
     }
 
-    changed |= c!=bufRadioText[i];
-    bufRadioText[i] = c;
+    changed |= c!=bufRadioText[out];
+    bufRadioText[out++] = c;
   }
 
   // Skip trailing whitespace
-  while((i>0) && (bufRadioText[i-1]<=' ')) i--;
+  while((out>0) && (bufRadioText[out-1]<=' ')) out--;
 
   // Check the end of the buffer for changes
-  changed |= bufRadioText[i] || bufRadioText[i+1];
+  changed |= bufRadioText[out] || bufRadioText[out+1];
 
   // Terminate multitline text with two zeros
-  bufRadioText[i++] = '\0';
-  bufRadioText[i++] = '\0';
+  bufRadioText[out++] = '\0';
+  bufRadioText[out] = '\0';
 
   // Done
   return(changed);
@@ -220,28 +218,38 @@ static bool showRdsTime()
 
 bool checkRds()
 {
+  static constexpr uint8_t RDS_MAX_GROUPS_PER_CHECK = 25;
   bool needRedraw = false;
   uint8_t mode = getRDSMode();
 
-  rx.getRdsStatus();
+  if(mode==RDS_OFF) return(false);
 
-  if(rx.getRdsReceived() && rx.getRdsSync() && rx.getRdsSyncFound())
+  // Drain at most one FIFO capacity per loop iteration so the UI can run.
+  for(uint8_t i=0 ; i<RDS_MAX_GROUPS_PER_CHECK ; i++)
   {
+    rx.getRdsStatus();
+    uint8_t count = rx.getNumRdsFifoUsed();
+    // Empty responses may retain event flags and stale A/B blocks.
+    if(!count) break;
+
     needRedraw |= (mode & RDS_PS) && showStationName(rx.getRdsStationName());
     needRedraw |= (mode & RDS_RT) && showRadioText(rx.getRdsVersionCode()? rx.getRdsText2B() : rx.getRdsText2A());
     needRedraw |= (mode & RDS_PI) && showRdsPiCode(rx.getRdsPI());
     needRedraw |= (mode & RDS_CT) && showRdsTime();
     needRedraw |= (mode & RDS_PT) && showRdsProgramType(rx.getRdsProgramTypeX(), !!(mode & RDS_RBDS));
+
+    // The reported count includes the group returned by this read (AN332).
+    if(count==1) break;
   }
 
   // Return TRUE if any RDS information changes
   return(needRedraw);
 }
 
-static const char *findCBChannelByFreq(uint16_t freq)
+static const char *findCBChannelByFreq(uint32_t freq)
 {
-  const int column_step = 450; // In kHz
-  const int row_step    = 10;
+  const int column_step = 450000; // In Hz
+  const int row_step    = 10000;
   const int max_columns = 8;   // A-H
   const int max_rows    = 45;
   static char buf[50];
@@ -250,10 +258,10 @@ static const char *findCBChannelByFreq(uint16_t freq)
 
   int offset = freq - MIN_CB_FREQUENCY;
   char type  = 'R';
-  if((offset%10) == 5)
+  if((offset%row_step) == 5000)
   {
     type = 'E';
-    offset -= 5;
+    offset -= 5000;
   }
 
   int column_index = offset / column_step;
@@ -267,7 +275,7 @@ static const char *findCBChannelByFreq(uint16_t freq)
   return(buf);
 }
 
-static const char *findNameByFreq(uint16_t freq, const NamedFreq *db, uint16_t dbSize)
+static const char *findNameByFreq(uint32_t freq, const NamedFreq *db, uint16_t dbSize)
 {
   int r, l;
 
@@ -324,10 +332,10 @@ static const char *findScheduleByFreq(uint16_t freq, bool periodic)
   return(entry? entry->name : 0);
 }
 
-bool identifyFrequency(uint16_t freq, bool periodic)
+bool identifyFrequency(uint32_t freq, bool periodic)
 {
   const char *name;
-  static uint16_t last_freq = 0;
+  static uint32_t last_freq = 0;
   static bool name_found = false;
 
   // RDS has priority on FM
@@ -358,7 +366,7 @@ bool identifyFrequency(uint16_t freq, bool periodic)
     }
   }
 
-  // Try EIBI schedule
-  name = findScheduleByFreq(freq, periodic);
+  // EIBI schedules use whole kHz.
+  name = findScheduleByFreq(freq / 1000, periodic);
   return(showStationName(name? name : "", true));
 }

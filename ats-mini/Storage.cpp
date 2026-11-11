@@ -62,8 +62,8 @@ void prefsInvalidate()
 
 struct SavedBand
 {
+  uint32_t currentFreq;   // Current frequency in Hz
   uint8_t bandMode;       // Band mode (FM, AM, LSB, or USB)
-  uint16_t currentFreq;   // Current frequency
   int8_t currentStepIdx;  // Current frequency step
   int8_t bandwidthIdx;    // Index of the table bandwidthFM, bandwidthAM or bandwidthSSB;
   int16_t usbCal;         // USB calibration value
@@ -106,7 +106,7 @@ bool prefsLoadBand(uint8_t idx, bool openPrefs)
   sprintf(name, "Band-%d", idx);
 
   // Read preference
-  bool result = !!prefs.getBytes(name, &value, sizeof(value));
+  bool result = prefs.getBytes(name, &value, sizeof(value))==sizeof(value);
   if(result)
   {
     bands[idx].currentFreq    = value.currentFreq;    // Frequency
@@ -218,6 +218,8 @@ void prefsSave(uint32_t items)
                                   ((uint32_t)currentSquelch[AM] << 24)); // Squelch
     prefs.putUChar("FmRegion",    FmRegionIdx);    // FM region
     prefs.putUChar("FmStereo",    fmStereoIdx);    // FM stereo mode
+    prefs.putBool("AudioClamp",   audioClamp);     // Hardware audio clamp present
+    prefs.putBool("AutoAntCap", autoAntennaCapacitor);
     prefs.putUChar("DSPPatchset", dspPatchesIdx);  // DSP patches
     prefs.putUChar("UILayout",    uiLayoutIdx);    // UI Layout
     prefs.putUChar("BLEMode",     bleModeIdx);     // Bluetooth mode
@@ -228,20 +230,22 @@ void prefsSave(uint32_t items)
     prefs.end();
   }
 
-  if(items & SAVE_BANDS)
+  if(items & (SAVE_BANDS | SAVE_CUR_BAND))
   {
-    // Will be saving to bands
     prefs.begin("bands", false, STORAGE_PARTITION);
-    prefs.putUChar("Version", VER_BANDS);
-    // Save band settings
-    for(int i=0 ; i<getTotalBands() ; i++) prefsSaveBand(i, false);
-    // Done with bands
+    if(items & SAVE_BANDS)
+    {
+      prefs.putUChar("Version", VER_BANDS);
+      for(int i=0 ; i<getTotalBands() ; i++) prefsSaveBand(i, false);
+    }
+    else
+      prefsSaveBand(bandIdx, false);
+
+    // Startup may save defaults before the receiver is ready to capture.
+    if(vfoInitialized) vfos[vfoIdx] = captureVfo();
+    prefs.putBytes("VFOSlots", vfos, sizeof(vfos));
+    prefs.putUChar("VFOActive", vfoIdx);
     prefs.end();
-  }
-  else if(items & SAVE_CUR_BAND)
-  {
-    // Save current band only
-    prefsSaveBand(bandIdx);
   }
 
   if(items & SAVE_MEMORIES)
@@ -304,6 +308,8 @@ bool prefsLoad(uint32_t items)
     currentSquelch[AM]  = (squelch >> 24) & 0xff;
     FmRegionIdx    = prefs.getUChar("FmRegion", FmRegionIdx);   // FM region
     fmStereoIdx    = prefs.getUChar("FmStereo", fmStereoIdx);   // FM stereo mode
+    audioClamp     = prefs.getBool("AudioClamp", true);        // Hardware audio clamp present
+    autoAntennaCapacitor = prefs.getBool("AutoAntCap", false);
     dspPatchesIdx  = prefs.getUChar("DSPPatchset", DSP_PATCHES_DEFAULT); // Uploaded patch set
     uiLayoutIdx    = prefs.getUChar("UILayout", uiLayoutIdx);   // UI Layout
     bleModeIdx     = prefs.getUChar("BLEMode", bleModeIdx);     // Bluetooth mode
@@ -316,6 +322,10 @@ bool prefsLoad(uint32_t items)
 
   if(items & SAVE_BANDS)
   {
+    // Missing or incompatible VFO data is initialized after radio startup.
+    vfos[0] = vfos[1] = {};
+    vfoIdx = 0;
+
     // Will be loading from bands
     prefs.begin("bands", true, STORAGE_PARTITION);
 
@@ -328,6 +338,12 @@ bool prefsLoad(uint32_t items)
 
     // Read band settings
     for(int i=0 ; i<getTotalBands() ; i++) prefsLoadBand(i, false);
+
+    if(prefs.getBytesLength("VFOSlots")==sizeof(vfos) &&
+       prefs.getBytes("VFOSlots", vfos, sizeof(vfos))==sizeof(vfos))
+      vfoIdx = prefs.getUChar("VFOActive", 0);
+    else
+      vfos[0] = vfos[1] = {};
 
     // Done with bands
     prefs.end();

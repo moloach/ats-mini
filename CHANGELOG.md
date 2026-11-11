@@ -4,6 +4,60 @@ The user manual is available at <https://esp32-si4732.github.io/ats-mini/manual.
 
 <!-- towncrier release notes start -->
 
+## 2.45 (2026-10-22)
+
+
+### Added
+
+- Added RDS OFF option to turn off RDS. [#388](https://github.com/esp32-si4732/ats-mini/issues/388)
+
+
+### Fixed
+
+- Fixed missing, truncated, or mixed RDS text and unnecessary station name resets, including corruption from empty RDS responses.
+- Improved RDS processing to reduce delayed updates and lost data.
+- RDS station names now update only after all four segments have arrived in order, starting with segment zero.
+
+## 2.44 (2026-10-18)
+
+
+### Added
+
+- Add display, radio, power, and connectivity settings to the Config web page, including Bluetooth Unpair All. Move Audio Clamp configuration from the receiver menu to the web page.
+
+
+### Changed
+
+- Move network settings and web login credentials to a separate Wi-Fi page, and add Wi-Fi mode selection. Organize Config settings into sections.
+- Short pressing the Off Timer menu entry now shuts down the receiver into deep sleep. Clicking still opens the timer settings, where a short press disables the timer.
+
+
+### Fixed
+
+- Suppress clicks when muting or changing bands or modes on receivers without an audio clamp circuit. Disable Audio Clamp on the Config web page for these receivers.
+
+## 2.43 (2026-10-14)
+
+
+### Added
+
+- Added VFO A/B tuning slots that persist across restarts. Click the VFO A/B menu item to switch slots, or short press to copy the active slot to the other.
+- Added an Off Timer to shut down the receiver after 5–240 minutes. Cycle the power switch to restart the receiver.
+- Download a BMP screenshot from the Wi-Fi web interface’s status page, one download at a time.
+
+
+### Changed
+
+- Keep tuning and menus responsive while connecting to Wi-Fi or synchronizing the clock. Failed time synchronization no longer clears the clock, and changing RDS settings preserves time set via Wi-Fi.
+- Remote control over USB, TCP, and Bluetooth is more reliable and no longer freezes receiver controls while waiting for commands.
+- Renamed Sleep to Sleep Timer, added a “sec” label, and show “Off” when disabled.
+
+
+### Fixed
+
+- Fixed saving preferences after button actions, including saving and deleting memory slots. Menu navigation no longer triggers unnecessary saves.
+- Preserved SSB fine tuning across band changes and restarts, and fixed recalling memories that differ only below 1 kHz. SSB tuning now uses a fixed 28 kHz tuning grid so the BFO no longer depends on tuning direction. WARNING: this update resets saved band frequencies, modes, steps, bandwidths, and SSB calibration.
+
 ## 2.42 (2026-09-30)
 
 

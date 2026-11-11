@@ -46,9 +46,9 @@ static void holdOutputLow(int pin)
   gpio_hold_en((gpio_num_t)pin);
 }
 
-static void offTimerShutdown()
+void receiverShutdown()
 {
-  muteOn(MUTE_FORCE, true);
+  muteOn(MUTE_FORCE, true, true);
   netStop();
   bleStop();
   prefsSave();
@@ -78,7 +78,7 @@ static void offTimerShutdown()
 
 void offTimerTick()
 {
-  if(offTimerDeadline && !offTimerRemainingUs()) offTimerShutdown();
+  if(offTimerDeadline && !offTimerRemainingUs()) receiverShutdown();
 }
 
 // Time
@@ -165,10 +165,11 @@ const char *getMACAddress()
 
 //
 // Mute sound on (x=1) or off (x=0), or get current status (x=2)
+// With a hardware clamp, leave the amplifier powered to avoid an enable thump.
 // Do not call this too often because a short PIN_AMP_EN impulse can trigger amplifier mode D,
 // see the NS4160 datasheet https://esp32-si4732.github.io/ats-mini/hardware.html#datasheets
 //
-bool muteOn(uint8_t mode, int x)
+bool muteOn(uint8_t mode, int x, bool muteAmp)
 {
   // Current mute status
   static bool muted = false;
@@ -233,21 +234,18 @@ bool muteOn(uint8_t mode, int x)
   }
 
   if(mute) {
-    // Disable audio amplifier to silence speaker
-    if(PIN_AMP_EN >= 0) digitalWrite(PIN_AMP_EN, LOW);
-    // Activate the mute circuit
-    digitalWrite(AUDIO_MUTE, HIGH);
+    if(muteAmp && PIN_AMP_EN >= 0) digitalWrite(PIN_AMP_EN, LOW);
+    if(audioClamp) digitalWrite(AUDIO_MUTE, HIGH);
     delay(50);
     rx.setAudioMute(true);
   }
 
   if(unmute) {
-    // Deactivate the mute circuit
-    digitalWrite(AUDIO_MUTE, LOW);
+    if(audioClamp) digitalWrite(AUDIO_MUTE, LOW);
     delay(50);
     rx.setAudioMute(false);
     // Enable audio amplifier to restore speaker output
-    if(PIN_AMP_EN >= 0) digitalWrite(PIN_AMP_EN, HIGH);
+    if(muteAmp && PIN_AMP_EN >= 0) digitalWrite(PIN_AMP_EN, HIGH);
   }
 
   switch(mode) {
@@ -426,7 +424,7 @@ bool clockUTCDateTimeToEpoch(int year, int month, int day, int hour, int minute,
 void clockTimeSynchronized()
 {
   clockHasBeenSet = true;
-  identifyFrequency(currentFrequency + currentBFO / 1000);
+  identifyFrequency(currentFrequency);
 }
 
 void clockReset()
@@ -456,22 +454,21 @@ bool clockSetEpoch(uint32_t epoch)
   clockHasBeenSet = true;
 
   if(changed)
-    identifyFrequency(currentFrequency + currentBFO / 1000);
+    identifyFrequency(currentFrequency);
 
   return(changed);
 }
 
 //
-// Check if given frequency belongs to given band
+// Check if given frequency in Hz belongs to given band
 //
-bool isFreqInBand(const Band *band, uint16_t freq)
+bool isFreqInBand(const Band *band, uint32_t freqHz)
 {
-  return((freq>=band->minimumFreq) && (freq<=band->maximumFreq));
+  return((freqHz>=band->minimumFreq) && (freqHz<=band->maximumFreq));
 }
 
 //
 // Convert a frequency from Hz to mode-specific units
-// (TODO: use Hz across the whole codebase)
 //
 uint16_t freqFromHz(uint32_t freq, uint8_t mode)
 {
@@ -484,14 +481,6 @@ uint16_t freqFromHz(uint32_t freq, uint8_t mode)
 uint32_t freqToHz(uint16_t freq, uint8_t mode)
 {
   return(mode == FM ? freq * 10000 : freq * 1000);
-}
-
-//
-// Extract BFO from a frequency in Hz
-//
-uint16_t bfoFromHz(uint32_t freq)
-{
-  return(freq % 1000);
 }
 
 //

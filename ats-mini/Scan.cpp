@@ -2,12 +2,6 @@
 #include "Utils.h"
 #include "Menu.h"
 
-// Tuning delays after rx.setFrequency()
-#define TUNE_DELAY_DEFAULT 30
-#define TUNE_DELAY_FM      60
-#define TUNE_DELAY_AM_SSB  80
-
-#define SCAN_POLL_TIME    10 // Tuning status polling interval (msecs)
 #define SCAN_POINTS      200 // Number of frequencies to scan
 
 #define SCAN_OFF    0   // Scanner off, no data
@@ -23,10 +17,11 @@ struct ScanPoint
 static ScanPoint *scanData = nullptr;
 
 static uint32_t scanTime = millis();
+static uint32_t scanTuneStarted;
 static uint8_t  scanStatus = SCAN_OFF;
 
-static uint16_t scanStartFreq;
-static uint16_t scanStep;
+static uint32_t scanStartFreq; // Hz
+static uint32_t scanStep;      // Hz
 static uint16_t scanCount;
 static uint8_t  scanMinRSSI;
 static uint8_t  scanMaxRSSI;
@@ -36,27 +31,27 @@ static uint8_t  scanMaxSNR;
 static inline uint8_t min(uint8_t a, uint8_t b) { return(a<b? a:b); }
 static inline uint8_t max(uint8_t a, uint8_t b) { return(a>b? a:b); }
 
-float scanGetRSSI(uint16_t freq)
+float scanGetRSSI(uint32_t freq)
 {
   // Input frequency must be in range of existing data
-  if((scanStatus!=SCAN_DONE) || (freq<scanStartFreq) || (freq>=scanStartFreq+scanStep*scanCount))
+  if((scanStatus!=SCAN_DONE) || (freq<scanStartFreq) || ((freq-scanStartFreq)/scanStep>=scanCount))
     return(0.0);
 
   uint8_t result = scanData[(freq - scanStartFreq) / scanStep].rssi;
   return((result - scanMinRSSI) / (float)(scanMaxRSSI - scanMinRSSI + 1));
 }
 
-float scanGetSNR(uint16_t freq)
+float scanGetSNR(uint32_t freq)
 {
   // Input frequency must be in range of existing data
-  if((scanStatus!=SCAN_DONE) || (freq<scanStartFreq) || (freq>=scanStartFreq+scanStep*scanCount))
+  if((scanStatus!=SCAN_DONE) || (freq<scanStartFreq) || ((freq-scanStartFreq)/scanStep>=scanCount))
     return(0.0);
 
   uint8_t result = scanData[(freq - scanStartFreq) / scanStep].snr;
   return((result - scanMinSNR) / (float)(scanMaxSNR - scanMinSNR + 1));
 }
 
-static void scanInit(uint16_t centerFreq, uint16_t step)
+static void scanInit(uint32_t centerFreq, uint32_t step)
 {
   scanStep    = step;
   scanCount   = 0;
@@ -68,17 +63,23 @@ static void scanInit(uint16_t centerFreq, uint16_t step)
   scanTime    = millis();
 
   const Band *band = getCurrentBand();
-  int freq = scanStep * (centerFreq / scanStep - SCAN_POINTS / 2);
+  int64_t freq = ((int64_t)(centerFreq / scanStep) - SCAN_POINTS / 2) * scanStep;
+  int64_t span = (int64_t)scanStep * (SCAN_POINTS - 1);
 
   // Adjust to band boundaries
-  if(freq + scanStep * (SCAN_POINTS - 1) > band->maximumFreq)
-    freq = band->maximumFreq - scanStep * (SCAN_POINTS - 1);
+  if(freq + span > band->maximumFreq)
+    freq = band->maximumFreq - span;
   if(freq < band->minimumFreq)
     freq = band->minimumFreq;
   scanStartFreq = freq;
 
   // Clear scan data
   memset(scanData, 0, SCAN_POINTS * sizeof(*scanData));
+
+  // A preceding confirmed tune has acknowledged STC. Start our own tune
+  // before waiting for completion, even if already at the first frequency.
+  scanTuneStarted = millis();
+  rx.setFrequency(freqFromHz(scanStartFreq, currentMode));
 }
 
 static bool scanTickTime()
@@ -86,26 +87,30 @@ static bool scanTickTime()
   // Scan must be on
   if((scanStatus!=SCAN_RUN) || (scanCount>=SCAN_POINTS)) return(false);
 
+  if(consumeAbortPending() || millis() - scanTuneStarted >= TUNE_TIMEOUT_MS)
+  {
+    scanStatus = SCAN_DONE;
+    return(false);
+  }
+
   // Wait for the right time
-  if(millis() - scanTime < SCAN_POLL_TIME) return(true);
+  if(millis() - scanTime < TUNE_POLL_INTERVAL_MS) return(true);
 
   // This is our current frequency to scan
-  uint16_t freq = scanStartFreq + scanStep * scanCount;
+  uint32_t freq = scanStartFreq + scanStep * scanCount;
 
   // Poll for the tuning status
-  rx.getStatus(0, 0);
-  if(!rx.getTuneCompleteTriggered())
+  if(!rx.pollTuneStatus())
   {
     scanTime = millis();
     return(true);
   }
 
-  // If frequency not yet set, set it and wait until next call to measure
-  if(rx.getCurrentFrequency() != freq)
+  // Do not attach measurements to a stale or unexpected frequency.
+  if(rx.getCurrentFrequency() != freqFromHz(freq, currentMode))
   {
-    rx.setFrequency(freq); // Implies tuning delay
-    scanTime = millis() - SCAN_POLL_TIME;
-    return(true);
+    scanStatus = SCAN_DONE;
+    return(false);
   }
 
   // Measure RSSI/SNR values
@@ -126,10 +131,13 @@ static bool scanTickTime()
   if((++scanCount >= SCAN_POINTS) || !isFreqInBand(getCurrentBand(), freq) || consumeAbortPending())
     scanStatus = SCAN_DONE;
   else
-    rx.setFrequency(freq); // Implies tuning delay
+  {
+    scanTuneStarted = millis();
+    rx.setFrequency(freqFromHz(freq, currentMode));
+  }
 
   // Save last scan time
-  scanTime = millis() - SCAN_POLL_TIME;
+  scanTime = millis() - TUNE_POLL_INTERVAL_MS;
 
   // Return current scan status
   return(scanStatus==SCAN_RUN);
@@ -138,7 +146,7 @@ static bool scanTickTime()
 //
 // Run entire scan once
 //
-void scanRun(uint16_t centerFreq, uint16_t step)
+void scanRun(uint32_t centerFreq, uint32_t step)
 {
   // Allocate once and retain the samples for drawing after the scan.
   if(!scanData)
@@ -148,20 +156,20 @@ void scanRun(uint16_t centerFreq, uint16_t step)
       return;
   }
 
-  // Set tuning delay
-  rx.setMaxDelaySetFrequency(currentMode == FM ? TUNE_DELAY_FM : TUNE_DELAY_AM_SSB);
   // Mute the audio
   muteOn(MUTE_TEMP, true);
   // Flag is set by rotary encoder and cleared on seek/scan entry
   seekStop = false;
   // Save current frequency
-  uint16_t curFreq = rx.getFrequency();
+  uint32_t curFreq = currentFrequency;
+  // Scan receiver frequencies without the SSB tuning or calibration offset.
+  if(isSSB()) rx.setSSBBfo(0);
   // Scan the whole range
-  for(scanInit(centerFreq, step) ; scanTickTime(););
+  for(scanInit(centerFreq, step) ; scanTickTime();) delay(1);
   // Restore current frequency
-  rx.setFrequency(curFreq);
+  if(isSSB()) rx.setFrequencyConfirmed(getReceiverFrequency(curFreq));
+  // Restore the derived BFO and calibration before unmuting.
+  updateFrequency(curFreq, false);
   // Unmute the audio
   muteOn(MUTE_TEMP, false);
-  // Restore tuning delay
-  rx.setMaxDelaySetFrequency(TUNE_DELAY_DEFAULT);
 }

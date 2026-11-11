@@ -25,11 +25,11 @@ static constexpr const lgfx::IFont* FONT_DIGITS  = &lgfx::fonts::Font7;  // 48px
 #define AUTHORS_LINE3  "Goshante, G8PTN (Dave), R9UCL (Max Arnold),"
 #define AUTHORS_LINE4  "Marat Fayzullin"
 
-#define VER_APP        242  // Firmware version
+#define VER_APP        245  // Firmware version
 #define VER_OTA          1  // OTA compatibility; bump when a full USB flash is required
 #define VER_SETTINGS    71  // Settings version
 #define VER_MEMORIES    71  // Memories version
-#define VER_BANDS       72  // Bands version
+#define VER_BANDS       73  // Bands and VFO slots version
 #define VER_STORAGE      0  // LittleFS storage version
 
 // Modes
@@ -39,6 +39,7 @@ static constexpr const lgfx::IFont* FONT_DIGITS  = &lgfx::fonts::Font7;  // 48px
 #define AM            3
 
 // RDS Modes
+#define RDS_OFF       0b00000000  // Off
 #define RDS_PS        0b00000001  // Station name
 #define RDS_CT        0b00000010  // Time
 #define RDS_PI        0b00000100  // PI code
@@ -103,7 +104,7 @@ static constexpr const lgfx::IFont* FONT_DIGITS  = &lgfx::fonts::Font7;  // 48px
 #define LAST_ITEM(array)  (ITEM_COUNT(array) - 1)
 
 // BFO and Calibration limits (MAX_BFO + MAX_CAL <= 16000)
-#define MAX_BFO       14000  // Maximum range for currentBFO = +/- MAX_BFO
+#define MAX_BFO       14000  // Maximum SSB offset from the receiver frequency, in Hz
 #define MAX_CAL       2000   // Maximum range for currentCAL = +/- MAX_CAL
 
 // Network connection modes
@@ -136,9 +137,9 @@ typedef struct
   const char *bandName;   // Band description
   uint8_t bandType;       // Band type (FM, MW, or SW)
   uint8_t bandMode;       // Band mode (FM, AM, LSB, or USB)
-  uint16_t minimumFreq;   // Minimum frequency of the band
-  uint16_t maximumFreq;   // Maximum frequency of the band
-  uint16_t currentFreq;   // Default frequency or current frequency
+  uint32_t minimumFreq;   // Minimum frequency of the band in Hz
+  uint32_t maximumFreq;   // Maximum frequency of the band in Hz
+  uint32_t currentFreq;   // Default or current frequency in Hz
   int8_t currentStepIdx;  // Default frequency step
   int8_t bandwidthIdx;    // Index of the table bandwidthFM, bandwidthAM or bandwidthSSB;
   int16_t usbCal;         // USB calibration value
@@ -155,7 +156,7 @@ typedef struct __attribute__((packed))
 
 typedef struct
 {
-  uint16_t freq;          // Frequency
+  uint32_t freq;          // Frequency in Hz
   const char *name;       // Frequency name
 } NamedFreq;
 
@@ -188,8 +189,7 @@ extern uint8_t snr;
 
 extern uint8_t volume;
 extern uint8_t currentSquelch[];
-extern uint16_t currentFrequency;
-extern int16_t currentBFO;
+extern uint32_t currentFrequency;  // Hz
 extern uint8_t currentMode;
 extern uint16_t currentCmd;
 extern uint16_t currentBrt;
@@ -216,6 +216,8 @@ extern uint8_t bleModeIdx;
 extern uint8_t wifiModeIdx;
 extern uint8_t FmRegionIdx;
 extern uint8_t fmStereoIdx;
+extern bool audioClamp;
+extern bool autoAntennaCapacitor;
 extern uint8_t dspPatchesIdx;
 
 extern int8_t agcIdx;
@@ -227,10 +229,11 @@ extern const int CALMax;
 
 static inline bool isSSB() { return(currentMode>FM && currentMode<AM); }
 
-void useBand(const Band *band);
+void useBand(Band *band);
 void setEncoderHalfStep(bool enabled);
-bool updateFrequency(int newFreq, bool wrap = true);
-bool updateBFO(int newBFO, bool wrap = true);
+uint16_t getReceiverFrequency(uint32_t freq);
+int getCurrentBFO();
+bool updateFrequency(int64_t newFreq, bool wrap = true);
 bool doSeek(int16_t enc);
 bool clickFreq(bool shortPress);
 uint8_t doAbout(int16_t enc);
@@ -240,10 +243,10 @@ bool consumeAbortPending();
 float batteryMonitor();
 bool drawBattery(int x, int y);
 
-// Scan.c
-void scanRun(uint16_t centerFreq, uint16_t step);
-float scanGetRSSI(uint16_t freq);
-float scanGetSNR(uint16_t freq);
+// Scan.c (frequencies and steps in Hz)
+void scanRun(uint32_t centerFreq, uint32_t step);
+float scanGetRSSI(uint32_t freq);
+float scanGetSNR(uint32_t freq);
 
 // Station.c
 const char *getStationName();
@@ -253,7 +256,7 @@ const char *getRdsTime();
 uint16_t getRdsPiCode();
 void clearStationInfo();
 bool checkRds();
-bool identifyFrequency(uint16_t freq, bool periodic = false);
+bool identifyFrequency(uint32_t freq, bool periodic = false);
 
 // Network.cpp
 int8_t getWiFiStatus();

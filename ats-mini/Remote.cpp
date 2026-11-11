@@ -137,24 +137,13 @@ static bool remoteShowError(Stream* stream, const char *message)
 
 static bool remoteSetFrequency(Stream *stream, uint32_t freqHz)
 {
-  Band *band = getCurrentBand();
-  // Validate Hz before conversion truncates fractional receiver units.
-  if(freqHz < freqToHz(band->minimumFreq, currentMode) ||
-     freqHz > freqToHz(band->maximumFreq, currentMode))
+  const Band *band = getCurrentBand();
+  if(freqHz < band->minimumFreq || freqHz > band->maximumFreq)
     return remoteShowError(stream, "Frequency is out of range for the current band");
-
-  uint16_t targetFreq = freqFromHz(freqHz, currentMode);
-  int targetBfo = isSSB() ? bfoFromHz(freqHz) : 0;
-  if(!updateFrequency(targetFreq, false))
-    return remoteShowError(stream, "Frequency is out of range for the current band");
-
-  if(isSSB())
-    updateBFO(targetBfo, false);
-  else if(currentBFO)
-    updateBFO(0, true);
+  if(!updateFrequency(freqHz, false)) return false;
 
   clearStationInfo();
-  identifyFrequency(currentFrequency + currentBFO / 1000);
+  identifyFrequency(currentFrequency);
 
   return true;
 }
@@ -256,8 +245,8 @@ static void remotePrintStatus(Stream* stream, RemoteState* state)
   // Remote serial
   stream->printf("%u,%u,%d,%d,%s,%s,%s,%s,%hu,%hu,%hu,%hu,%hu,%.2f,%hu\r\n",
                 VER_APP,
-                currentFrequency,
-                currentBFO,
+                getReceiverFrequency(currentFrequency),
+                getCurrentBFO(),
                 ((currentMode == USB) ? getCurrentBand()->usbCal :
                  (currentMode == LSB) ? getCurrentBand()->lsbCal : 0),
                 getCurrentBand()->bandName,

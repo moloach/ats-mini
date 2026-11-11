@@ -24,7 +24,8 @@ int getStrength(int rssi);
 
 // Set, reset, toggle, or query switches
 bool sleepOn(int x = 2);
-bool muteOn(uint8_t mode, int x = 2);
+bool muteOn(uint8_t mode, int x = 2, bool muteAmp = false);
+void receiverShutdown();
 
 // Configured duration is saved; a fresh countdown starts on power-up.
 extern uint16_t offTimerMinutes;
@@ -52,10 +53,9 @@ bool clockUpdate();
 
 // Helpers to convert from/to Hz
 uint16_t freqFromHz(uint32_t freq, uint8_t mode);
-uint16_t bfoFromHz(uint32_t freq);
 uint32_t freqToHz(uint16_t freq, uint8_t mode);
 
-// Check if given frequency belongs to a band
-bool isFreqInBand(const Band *band, uint16_t freq);
+// Check if given frequency in Hz belongs to a band
+bool isFreqInBand(const Band *band, uint32_t freqHz);
 
 #endif // UTILS_H

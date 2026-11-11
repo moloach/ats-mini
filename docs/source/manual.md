@@ -9,7 +9,7 @@
 * **Bluetooth icon** (right after the save icon). Different colors indicate the connection status.
 * **Wi-Fi icon** (top right area near the battery). Different colors indicate the connection status.
 * **Battery status** (top right corner). It doesn't show the voltage when charged, see [#36](https://github.com/esp32-si4732/ats-mini/issues/36#issuecomment-2778356143). The only indication that the battery is charging is the hardware LED on the bottom of the receiver, which turns ON during charging.
-* **Band name and modulation** (VHF & FM, top center). See the [Bands table](#bands-table) for more details.
+* **Band name and modulation** (VHF & FM, top center). The rounded **A** or **B** indicator after the mode shows the active VFO slot. See the [Bands table](#bands-table) for more details.
 * **Info panel** (the box on the left side), also **Menu**. The parameters are explained in the [Menu](#menu) section. It can also show the current time, or the date and time after a successful synchronization. When Off Timer is enabled, this row alternates with the remaining time as **Zzz: hh:mm**. If the clock is not set, only the countdown is shown.
 * **Frequency** (center of the screen).
 * **FM station name** (RDS PS) or **frequency name** (right below the frequency). A frequency name appears for some popular frequencies like FT8, SSTV, CB channels, or a shortwave [schedule](#schedule). Can also display current **menu option** using a bigger font when the Zoom Menu setting is enabled.
@@ -21,7 +21,7 @@
 
 The differences are:
 
-* **Stereo indicator** is on the right side of the band and mode (VHF & FM).
+* **Stereo indicator** is on the right side of the VFO indicator.
 * **Tuning scale** (right under the station name). Numbers on the left & right sides are the band limits.
 * **S/N Meter** (in dB). The range is 0...127 and the visual indicator linearly displays this range.
 * **RSSI & S-Meter** (the number is in dBµV, the meter is in S-points). Please note that the RSSI range is also 0...127 (no negative values) and according to [these tables](https://dl4zao.de/_downloads/Dezibel.pdf) any values below S4 on HF (rssi < 4) and below S7 on VHF (rssi < 2) are bogus. Thus it is very far from being precise, and also depends on the antenna impedance.
@@ -54,6 +54,7 @@ The menu can be invoked by clicking the encoder button and is closed automatical
 * **Mode** - FM (only available on the VHF band); LSB, USB, AM (available on other bands). The receiver doesn't support the NFM mode (on any band, including the CB) due to limitations of the SI4732 chip.
 * **Band** - List of [Bands](#bands-table).
 * **Volume** - 0 (silent) ... 63 (max). The headphone volume level can be low (compared to the built-in speaker) due to limitation of the initial hardware design. Use short press to mute/unmute.
+* **VFO A/B** - Click to switch between two tuning slots, or short press (>0.5 sec) to copy the active slot into the inactive slot without switching. Both actions return to tuning. Each slot remembers its frequency (including SSB fine tuning), band, mode, step, and bandwidth. Tuning and memory recall affect only the active slot; other settings and memory slots are shared. Both slots and the active selection are saved after 10 seconds of inactivity. Initially, both slots contain the current tuning position.
 * **Step** - Tuning step (not every step is available on every band and mode).
 * **Seek** - Seek up or down on AM/FM, normal tuning on LSB/USB (hardware seek function is not supported by SI4732 on SSB). Rotate or click the encoder to stop the seek. Use short press to switch between the seek and [schedule](#schedule) modes. Use press and rotate for manual fine tuning.
 * **Scan** - Scan a frequency range and plot the RSSI (S) and SNR (N) graphs (unfortunately, these metrics are almost meaningless in SSB modes due to SI4732 patch limitations). Both graphs are normalized to 0.0 - 1.0 range. While the Scan mode is active, short press the encoder for 0.5 seconds to rescan. To abort a running scan process click or rotate the encoder.
@@ -72,14 +73,14 @@ The menu can be invoked by clicking the encoder button and is closed automatical
 * **UTC Offset** - Affects the displayed date and time. Please note that automatic DST transitions are not supported; the offset needs to be adjusted manually.
 * **Sleep Timer** - Automatic sleep interval in seconds (Off - disabled).
 * **Sleep Mode** - Locked - lock the encoder rotation during sleep; Unlocked - allow tuning the frequency in sleep mode; CPU Sleep - the maximum power saving mode. With the display being on, default brightness, and Wi-Fi the power consumption is about 170mA, without Wi-Fi 100mA, Locked/Unlocked modes draw about 70mA, CPU sleep mode draws about 40mA.
-* **Off Timer** - Shut down after 5–240 minutes, in 5-minute steps. Turn the encoder to start or restart the timer; short press to disable it (Off). The remaining time alternates with the date and time in the info panel. The timer works during sleep and restarts on each power-up. After shutdown, cycle the power switch to restart the receiver. This is not a true power-off state: the receiver still draws some current.
+* **Off Timer** - Short press the menu entry to shut down immediately into deep sleep, or click to adjust the timer (5–240 minutes, in 5-minute steps). While adjusting, turn the encoder to start or restart the timer; short press to disable it (Off). The remaining time alternates with the date and time in the info panel. The timer works during sleep and restarts on each power-up. After shutdown, cycle the power switch or press reset to restart the receiver. This is not a true power-off state: the receiver still draws some current.
 * **Theme** - Color theme.
 * **UI Layout** - Alternative UI layouts. For now there is just one alternative UI with large S-meter and S/N-meter.
 * **Zoom Menu** - Display the currently selected menu item using a larger font (accessibility option).
 * **Scroll Dir.** - Menu scroll direction for clockwise encoder turn.
-* **RDS** - Radio Data System options: PS - radio station name, CT - date and time, RT - text, PTY - genre, ALL (EU/US) - everything. RDS CT should contain UTC date and time, but some stations incorrectly transmit local or completely bogus values. The clock is synchronized from RDS only once. To synchronize it again, disable and re-enable RDS CT or switch the receiver off and on.
+* **RDS** - Radio Data System options: PS - radio station name, CT - date and time, RT - text, PTY - genre, ALL (EU/US) - everything, OFF - turn RDS off. RDS CT should contain UTC date and time, but some stations incorrectly transmit local or completely bogus values. The clock is synchronized from RDS only once. To synchronize it again, disable and re-enable RDS CT or switch the receiver off and on.
 * **FM Stereo** - **Auto** lets the receiver blend down to mono on its own as the signal gets worse, **Mono** forces mono audio, trading the stereo image for less hiss on a weak station.
-* **FM Region** - FM de-emphasis time constant by region (50µs for EU/JP/AU and 70µs for the US).
+* **FM Region** - FM de-emphasis time constant by region (50µs for EU/JP/AU and 75µs for the US).
 * **Calibration** - SSB calibration offset (-2000...2000, per mode/band).
 * **DSP Patches** - Select **Default** or an uploaded AM/SSB patch set. Manage these experimental patches on the web interface's **Patches** page.
 * **Load EiBi** - download the EiBi [schedule](#schedule) (requires Wi-Fi internet connection).
@@ -92,35 +93,22 @@ The menu can be invoked by clicking the encoder button and is closed automatical
 
 ## Wi-Fi
 
-The Wi-Fi mode (2.4GHz only) can be used for the following purposes (for now):
-
-* Time synchronization via NTP (Network Time Protocol) or the configuration web page.
-* Download the EiBi shortwave schedule.
-* Control the receiver over [TCP](remote.md#tcp-over-wi-fi).
-* Viewing the receiver status (date/time and UTC offset, frequency, RSSI/SNR, volume, battery voltage, etc).
-* Edit, reorder, import, and export memory slots.
-* Manage the receiver settings.
-* Upload or delete an optional [splash image](_static/splash-outdoor.png) shown when the receiver starts.
-
-Each web page has a footer showing used and free internal heap and PSRAM, measured while the page is generated.
-
-There are a couple of modes:
+There are a couple of modes (2.4GHz only):
 
 * **Off** (default)
 * **AP Only** - Access Point mode. The receiver creates its own access point called `ATS-Mini` and starts the web server on <http://10.1.1.1>.
-* **AP+Connect** - Access Point mode + try to connect to one of the three configured access points. If the connection succeeds, the receiver will synchronize the time every 5 minutes and start the web server on both <http://10.1.1.1> and a dynamic IP address it got from the configured access point.
-* **Connect** - try to connect to one of the three configured access points, start the web server on a dynamic IP, then synchronize the time every 5 minutes.
+* **AP+Connect** - Access Point mode + try to connect to one of the three configured access points. If the connection succeeds, the receiver will synchronize the time every 4 hours and start the web server on both <http://10.1.1.1> and a dynamic IP address it got from the configured access point.
+* **Connect** - try to connect to one of the three configured access points, start the web server on a dynamic IP, then synchronize the time every 4 hours.
 * **Sync Only** - connect to synchronize the clock, then disable Wi-Fi. Wi-Fi is also disabled if connection or time synchronization times out.
 
-Initial configuration:
+### Initial configuration
 
-* Enable the **AP Only** mode (the receiver will briefly display its 10.1.1.1 IP address).
-* Connect to the `ATS-Mini` access point from your phone or computer. There is no internet connection available on this access point. When connecting from a phone, it might be necessary to switch off the mobile data connection and any VPN/firewall software.
-* Open a browser and visit the following URL: <http://10.1.1.1>. The status web page should open. Alternatively, you can try the mDNS address <atsmini.local> in your browser.
-* Click the `Memory` link to edit slot names, bands, frequencies (in Hz), and modes. Use the up/down buttons to reorder slots, and press `Save` to apply changes to the receiver. `Export` downloads the current table as JSON; `Import` loads a previously exported file, including files from the legacy USB editor.
-* Click the `Config` link. Here you can configure up to three access points the receiver will try to connect to, add optional login and password to protect the memory, settings, and firmware update pages, set the UTC date/time manually or from the browser, and change the UTC offset and other settings. Enable `Scan Hidden SSIDs` only if one of the configured access points does not broadcast its network name; leaving it off makes Wi-Fi connection faster. Leave `Half-step Encoder` off for the original EC11 20C20P encoder (20 clicks, 20 pulses), and enable it for an EC11 30C15P encoder (30 clicks, 15 pulses). Half-step mode is also required for the LILYGO T-Embed SI4732 hardware variant. See [discussion #87](https://github.com/esp32-si4732/ats-mini/discussions/87) for more information.
-* After that, switch the Wi-Fi mode to **AP+Connect** or **Connect** (the receiver will briefly show its new dynamic IP address it got from a configured access point).
-* Now connect your phone/computer to the same access point and open the new URL to check whether the receiver connected to the internet.
+1. Enable the **AP Only** mode (the receiver will briefly display its 10.1.1.1 IP address).
+2. Connect to the `ATS-Mini` access point from your phone or computer. There is no internet connection available on this access point. When connecting from a phone, it might be necessary to switch off the mobile data connection and any VPN/firewall software.
+3. Open a browser and visit the following URL: <http://10.1.1.1>. The status web page should open. Alternatively, you can try the mDNS address <atsmini.local> in your browser.
+4. Click the `Wi-Fi` link, enter the network name and password for your access point, and press `Save`.
+5. Switch the Wi-Fi mode to **AP+Connect** or **Connect** (the receiver will briefly show its new dynamic IP address it got from a configured access point).
+6. Connect your phone/computer to the same access point and open the receiver’s new IP address or <atsmini.local> in your browser.
 
 From now on you can switch the modes as you want and connect to your receiver either via the `ATS-Mini` internal access point (if enabled, mostly useful when there are no access points around), or via an external access point and a dynamic IP address. The receiver will always listen on the mDNS address <atsmini.local>.
 
@@ -128,7 +116,21 @@ From now on you can switch the modes as you want and connect to your receiver ei
 When on the go, you can set up a mobile Wi-Fi hotspot on your smartphone and use it to connect the receiver to the internet.
 ```
 
-<!-- ### Receiver settings available via Wi-Fi only -->
+### Web pages and settings
+
+The `Status` page shows the network addresses, firmware version, date/time, band, frequency and mode, signal strength, signal-to-noise ratio, and battery voltage. Click `Download screenshot` to save an image of the receiver's display.
+
+The `Memory` page lets you edit slot names, bands, frequencies (in Hz), and modes. Use the up/down buttons to reorder slots, and press `Save` to apply changes to the receiver. `Export` downloads the current table as JSON; `Import` loads a previously exported file, including files from the legacy USB editor.
+
+The `Config` page lets you set the UTC date/time manually or from the browser, and adjust display, radio, power, hardware, and USB/TCP/Bluetooth modes. See the [Settings menu](#settings-menu) for descriptions of shared settings.
+
+* `Off Timer`: changing the duration restarts its countdown; saving the same duration leaves it running.
+* `Half-step Encoder`: leave it off for the original EC11 20C20P encoder (20 clicks, 20 pulses), and enable it for an EC11 30C15P encoder (30 clicks, 15 pulses). Half-step mode is also required for the LILYGO T-Embed SI4732 hardware variant. See [discussion #87](https://github.com/esp32-si4732/ats-mini/discussions/87) for more information.
+* `Audio Clamp`: disable it for receivers without an audio clamp circuit to suppress clicks when muting or changing bands or modes. Leave it enabled for receivers with the circuit and for LILYGO T-Embed SI4732.
+* `Automatic Antenna Capacitor`: enables automatic antenna tuning on MW1, MW2, MW3, and 160 m bands. It is disabled by default and only works on receivers without a Hi-Z input circuit.
+* `Splash Screen`: upload or delete an optional [splash image](_static/splash-outdoor.png) shown when the receiver starts.
+
+The `Wi-Fi` page lets you select the Wi-Fi mode, configure up to three access points the receiver will try to connect to and add optional login and password to protect the memory, settings, Wi-Fi, and firmware update pages. Enable `Scan Hidden SSIDs` only if one of the configured access points does not broadcast its network name; leaving it off makes Wi-Fi connection faster. Changing Wi-Fi mode may disconnect the browser; Off and Sync Only disable the web interface.
 
 Firmware updates are available through **Settings → Update FW** or the web interface's **Update** page. See [updating over Wi-Fi](flash.md#update-over-wi-fi) for instructions.
 
