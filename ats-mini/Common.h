@@ -247,6 +247,7 @@ bool drawBattery(int x, int y);
 void scanRun(uint32_t centerFreq, uint32_t step);
 float scanGetRSSI(uint32_t freq);
 float scanGetSNR(uint32_t freq);
+void atsRun();
 
 // Station.c
 const char *getStationName();

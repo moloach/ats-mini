@@ -1,6 +1,9 @@
 #include "Common.h"
 #include "Utils.h"
 #include "Menu.h"
+#include "Draw.h"
+#include "Memories.h"
+#include "Storage.h"
 
 #define SCAN_POINTS      200 // Number of frequencies to scan
 
@@ -172,4 +175,152 @@ void scanRun(uint32_t centerFreq, uint32_t step)
   updateFrequency(curFreq, false);
   // Unmute the audio
   muteOn(MUTE_TEMP, false);
+}
+
+//
+// Automatic station storage for the current FM or MW band
+//
+
+#define ATS_MIN_RSSI_FM      10
+#define ATS_MIN_SNR_FM       10
+#define ATS_MIN_RSSI_AM       6
+#define ATS_MIN_SNR_AM        8
+#define ATS_SAMPLE_COUNT      3
+#define ATS_SAMPLE_DELAY_MS  50
+#define ATS_SETTLE_MS       100
+
+static bool atsAborted = false;
+
+static bool atsFindEmptySlot(uint8_t &slot)
+{
+  for(uint8_t i=0 ; i<getTotalMemories() ; i++)
+    if(!getMemory(i).freq)
+    {
+      slot = i;
+      return(true);
+    }
+  return(false);
+}
+
+static bool atsStopSeeking()
+{
+  if(consumeAbortPending())
+  {
+    atsAborted = true;
+    return(true);
+  }
+  return(false);
+}
+
+static uint8_t atsMedian(uint8_t a, uint8_t b, uint8_t c)
+{
+  if(a > b) { uint8_t t = a; a = b; b = t; }
+  if(b > c) { uint8_t t = b; b = c; c = t; }
+  if(a > b) { uint8_t t = a; a = b; b = t; }
+  return(b);
+}
+
+static bool atsAcceptSignal()
+{
+  uint8_t rssiValues[ATS_SAMPLE_COUNT];
+  uint8_t snrValues[ATS_SAMPLE_COUNT];
+
+  for(uint8_t i=0 ; i<ATS_SAMPLE_COUNT ; i++)
+  {
+    rx.getCurrentReceivedSignalQuality();
+    rssiValues[i] = rx.getCurrentRSSI();
+    snrValues[i] = rx.getCurrentSNR();
+    if(i + 1 < ATS_SAMPLE_COUNT) delay(ATS_SAMPLE_DELAY_MS);
+  }
+
+  uint8_t rssiValue = atsMedian(rssiValues[0], rssiValues[1], rssiValues[2]);
+  uint8_t snrValue  = atsMedian(snrValues[0], snrValues[1], snrValues[2]);
+  uint8_t squelch   = currentSquelch[currentMode] & 0x7f;
+
+  if(squelch)
+    return((currentSquelch[currentMode] & 0x80)? snrValue>=squelch : rssiValue>=squelch);
+
+  if(currentMode == FM)
+    return(rssiValue>=ATS_MIN_RSSI_FM && snrValue>=ATS_MIN_SNR_FM);
+
+  return(rssiValue>=ATS_MIN_RSSI_AM && snrValue>=ATS_MIN_SNR_AM);
+}
+
+void atsRun()
+{
+  drawScreen();
+
+  const Band *band = getCurrentBand();
+  if((currentMode != FM && currentMode != AM) ||
+     (band->bandType != FM_BAND_TYPE && band->bandType != MW_BAND_TYPE))
+  {
+    statusShow("ATS", "FM/MW only");
+    drawMessage("FM/MW only");
+    return;
+  }
+
+  uint8_t slot;
+  if(!atsFindEmptySlot(slot))
+  {
+    statusShow("ATS", "Memory full");
+    drawMessage("Memory full");
+    return;
+  }
+
+  uint32_t savedFrequency = currentFrequency;
+  uint8_t stored = 0;
+  atsAborted = false;
+  seekStop = false;
+  drawMessage("ATS...");
+  muteOn(MUTE_TEMP, true);
+
+  if(updateFrequency(band->minimumFreq, false))
+  {
+    uint32_t previous = currentFrequency;
+    for(;;)
+    {
+      if(consumeAbortPending())
+      {
+        atsAborted = true;
+        break;
+      }
+
+      delay(ATS_SETTLE_MS);
+      if(atsAcceptSignal())
+      {
+        Memory memory = {};
+        memory.freq = currentFrequency;
+        memory.band = bandIdx;
+        memory.mode = currentMode;
+        setMemory(slot, memory);
+        stored++;
+
+        char message[16];
+        snprintf(message, sizeof(message), "ATS %u", (unsigned)stored);
+        drawMessage(message);
+
+        if(!atsFindEmptySlot(slot)) break;
+      }
+
+      if(previous >= band->maximumFreq) break;
+      rx.seekStationProgress(nullptr, atsStopSeeking, 1);
+      if(atsAborted) break;
+
+      uint32_t target = freqToHz(rx.getCurrentFrequency(), currentMode);
+      if(target <= previous || target > band->maximumFreq) break;
+      if(!updateFrequency(target, false)) break;
+      previous = currentFrequency;
+    }
+  }
+
+  updateFrequency(savedFrequency, false);
+  clearStationInfo();
+  identifyFrequency(currentFrequency);
+  muteOn(MUTE_TEMP, false);
+
+  char status[32];
+  if(stored) snprintf(status, sizeof(status), "%u station%s stored", (unsigned)stored, stored==1? "" : "s");
+  else strlcpy(status, "No stations found", sizeof(status));
+  statusShow("ATS", status);
+  if(stored) prefsRequestSave(SAVE_MEMORIES);
 }

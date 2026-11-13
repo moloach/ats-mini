@@ -87,13 +87,14 @@ Band *getCurrentBand() { return(&bands[bandIdx]); }
 #define MENU_STEP         4
 #define MENU_SEEK         5
 #define MENU_SCAN         6
-#define MENU_MEMORY       7
-#define MENU_SQUELCH      8
-#define MENU_BW           9
-#define MENU_AGC_ATT     10
-#define MENU_AVC         11
-#define MENU_SOFTMUTE    12
-#define MENU_SETTINGS    13
+#define MENU_ATS          7
+#define MENU_MEMORY       8
+#define MENU_SQUELCH      9
+#define MENU_BW          10
+#define MENU_AGC_ATT     11
+#define MENU_AVC         12
+#define MENU_SOFTMUTE    13
+#define MENU_SETTINGS    14
 
 int8_t menuIdx = MENU_VOLUME;
 
@@ -106,6 +107,7 @@ static const char *menu[] =
   "Step",
   "Seek",
   "Scan",
+  "ATS",
   "Memory",
   "Squelch",
   "Bandwidth",
@@ -1211,6 +1213,10 @@ static void clickMenu(int cmd, bool shortPress)
       // step as scale resolution (10kHz for AM, 100kHz for FM)
       currentCmd = CMD_SCAN;
       clickScan(true);
+      break;
+
+    case MENU_ATS:
+      atsRun();
       break;
   }
 }
